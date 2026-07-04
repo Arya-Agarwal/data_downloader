@@ -1,0 +1,66 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+
+.venv/
+venv/
+env/
+
+# IDE
+
+.vscode/
+.idea/
+
+# Logs
+
+logs/
+*.log
+
+# Environment files
+
+.env
+.env.*
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# Jupyter
+
+.ipynb_checkpoints/
+
+# Build
+
+build/
+dist/
+
+# Temporary
+
+tmp/
+temp/
+*.tmp
+
+# Data artifacts (optional — uncomment if you don't want huge datasets in git)
+
+data/
+
+# Large debug files
+
+data/tracker/gap_debug.csv
+
+# Secrets
+
+config.local.py
+credentials.json
+token.json

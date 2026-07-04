@@ -1,0 +1,6 @@
+kiteconnect
+pandas
+pyarrow
+python-dotenv
+loguru
+pytz
