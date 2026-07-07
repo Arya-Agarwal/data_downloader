@@ -20,21 +20,29 @@ class StrikeUniverse:
 
     def __init__(self):
 
+        self.margin = 250
+
+        self.previous_low = None
+        self.previous_high = None
+
+        self.live_low = None
+        self.live_high = None
+
+        self.current_universe = set()
+
         self.step = STRIKE_STEP[
             INDEX_NAME
         ]
 
-        self.day = None
-
-        self.day_high = None
-        self.day_low = None
-
-        self.subscribed = set()
-
-        self.previous_high = None
-        self.previous_low = None
-
         self._load_previous_day()
+
+        self.live_low = self.previous_low
+        self.live_high = self.previous_high
+
+        self.current_universe = self._build_range(
+            self.previous_low,
+            self.previous_high
+        )
 
     def _load_previous_day(
         self
@@ -115,77 +123,64 @@ class StrikeUniverse:
                 self.step
             )
         )
-
+    
     def update(
         self,
         ltp
     ):
 
-        today = pd.Timestamp.now(
-            tz="Asia/Kolkata"
-        ).date()
-
-        if self.day != today:
-
-            self.day = today
-
-            self.day_high = ltp
-            self.day_low = ltp
-
-            self.subscribed = (
-                self._build_range(
-                    self.previous_low,
-                    self.previous_high
-                )
-            )
-
-            log.info(
-                f"Initial live universe : "
-                f"{len(self.subscribed)} strikes"
-            )
-
-            return (
-                self.subscribed,
-                True
-            )
-
         changed = False
 
-        if ltp > self.day_high:
-            self.day_high = ltp
+        if ltp < self.live_low:
+            self.live_low = ltp
             changed = True
 
-        if ltp < self.day_low:
-            self.day_low = ltp
+        if ltp > self.live_high:
+            self.live_high = ltp
             changed = True
 
         if not changed:
             return (
-                set(),
+                sorted(self.current_universe),
                 False
             )
 
-        expanded = self._build_range(
-            self.day_low,
-            self.day_high
+        new_range = self._build_range(
+            min(
+                self.previous_low,
+                self.live_low
+            ),
+            max(
+                self.previous_high,
+                self.live_high
+            )
         )
 
-        new = (
-            expanded
+        added = (
+            new_range
             -
-            self.subscribed
+            self.current_universe
         )
 
-        if new:
+        if added:
 
-            self.subscribed |= new
+            self.current_universe |= added
 
             log.info(
-                f"Universe expanded : "
-                f"+{len(new)} strikes"
+                f"Strike universe expanded by "
+                f"{len(added)} strikes"
+            )
+
+            return (
+                sorted(
+                    self.current_universe
+                ),
+                True
             )
 
         return (
-            new,
-            len(new) > 0
+            sorted(
+                self.current_universe
+            ),
+            False
         )

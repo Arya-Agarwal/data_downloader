@@ -7,7 +7,12 @@ from core.logger import log
 from core.live.strike_universe import (
     StrikeUniverse
 )
-
+from core.live.session.live_session import (
+    LiveSession
+)
+from core.runtime.runtime_metrics import (
+    RuntimeMetrics
+)
 
 class SubscriptionManager:
 
@@ -18,6 +23,10 @@ class SubscriptionManager:
         instruments
     ):
         self.kite = kite
+        
+        self.metrics = RuntimeMetrics()
+        
+        self.session = LiveSession()
 
         self.websocket = websocket
 
@@ -92,39 +101,59 @@ class SubscriptionManager:
 
     def subscribe_initial(self):
 
-        mid = (
-            self.universe.previous_high
-            +
+        self.session.current_low = (
             self.universe.previous_low
-        ) / 2
+        )
+
+        self.session.current_high = (
+            self.universe.previous_high
+        )
 
         strikes, _ = (
             self.universe.update(
-                mid
+                self.universe.previous_low,
+                self.universe.previous_high,
+                self.universe.previous_low,
+                self.universe.previous_high
             )
         )
 
         self.subscribe_strikes(
             strikes
         )
-
+    
+    
     def update_from_spot(
         self,
         ltp
     ):
-        strikes, changed = (
-            self.universe.update(
-                ltp
-            )
+
+        changed = self.session.update(
+            ltp
         )
 
         if not changed:
             return
 
-        self.subscribe_strikes(
-            strikes
+        live_low, live_high = (
+            self.session.get_range()
         )
 
+        strikes, universe_changed = (
+            self.universe.update(
+                self.universe.previous_low,
+                self.universe.previous_high,
+                live_low,
+                live_high
+            )
+        )
+
+        if universe_changed:
+
+            self.subscribe_strikes(
+                strikes
+            )
+    
     def subscribe_strikes(
         self,
         strikes
@@ -169,6 +198,9 @@ class SubscriptionManager:
 
         self.subscribed_tokens.update(
             tokens
+        )
+        self.metrics.update_subscriptions(
+            len(self.subscribed_tokens)
         )
 
         log.info(

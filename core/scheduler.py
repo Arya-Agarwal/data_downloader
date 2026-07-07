@@ -1,7 +1,13 @@
 import time
+
 from datetime import timedelta
 
 from config import (
+    FORCE_MARKET_CLOSE,
+    PREMARKET_UPDATE_HOUR,
+    PREMARKET_UPDATE_MINUTE,
+    PREMARKET_WAIT_HOUR,
+    PREMARKET_WAIT_MINUTE,
     MARKET_START_HOUR,
     MARKET_START_MINUTE,
     MARKET_END_HOUR,
@@ -9,119 +15,42 @@ from config import (
 )
 
 from core.logger import log
+
 from core.utils.time_utils import (
     now_ist
 )
+
 from core.downloaders.spot_downloader import (
-    download_spot
-)
-from core.downloaders.futures_downloader import (
-    download_futures
-)
-from core.downloaders.options_downloader import (
-    download_options
-)
-from core.downloaders.strike_selector import (
-    generate_strikes,
-    get_live_atm_strikes
-)
-from core.recovery.gap_recovery import (
-    recover_all_gaps
-)
-from core.downloaders.options_downloader import (
-    download_eod_pending_options
-)
-from core.downloaders.spot_downloader import (
+    download_spot,
     download_eod_pending_spot
 )
 
 from core.downloaders.futures_downloader import (
+    download_futures,
     download_eod_pending_futures
 )
 
+from core.downloaders.options_downloader import (
+    download_options,
+    download_eod_pending_options
+)
 
-def get_market_start():
-    now = now_ist()
+from core.downloaders.strike_selector import (
+    get_live_atm_strikes
+)
 
-    return now.replace(
-        hour=MARKET_START_HOUR,
-        minute=MARKET_START_MINUTE,
-        second=0,
-        microsecond=0
-    )
-
-
-def get_market_end():
-    now = now_ist()
-
-    return now.replace(
-        hour=MARKET_END_HOUR,
-        minute=MARKET_END_MINUTE,
-        second=0,
-        microsecond=0
-    )
+from core.recovery.gap_recovery import (
+    recover_all_gaps
+)
 
 
-def is_weekend():
-    return now_ist().weekday() >= 5
-
-
-def is_market_open():
-    now = now_ist()
-
-    return (
-        get_market_start()
-        <= now
-        <= get_market_end()
-    )
-
-
-def get_next_market_open():
-    now = now_ist()
-
-    next_open = get_market_start()
-
-    if now < next_open:
-        return next_open
-
-    next_open = next_open + timedelta(
-        days=1
-    )
-
-    while next_open.weekday() >= 5:
-        next_open += timedelta(
-            days=1
-        )
-
-    return next_open
-
-
-def sleep_until_market():
-    next_open = get_next_market_open()
-
-    sleep_seconds = (
-        next_open - now_ist()
-    ).total_seconds()
-
-    log.info(
-        f"Sleeping until market opens: "
-        f"{next_open}"
-    )
-
-    time.sleep(
-        max(
-            sleep_seconds,
-            0
-        )
-    )
-
-
-def run_live_cycle(
+def run_historical_download(
     kite,
     instruments
 ):
+
     log.info(
-        "Running live cycle"
+        "Running historical update."
     )
 
     download_spot(
@@ -133,25 +62,40 @@ def run_live_cycle(
         instruments
     )
 
-    live_strikes = get_live_atm_strikes()
+    strikes = (
+        get_live_atm_strikes()
+    )
 
     download_options(
         kite,
         instruments,
-        live_strikes,
+        strikes,
         allowed_timeframes=[
             "minute",
             "5minute"
         ]
     )
-    
-    
-def run_end_of_day(
-    kite,
-    instruments
+
+
+def run_gap_recovery(
+    kite
 ):
+
     log.info(
-        "Running EOD pending option refresh"
+        "Running gap recovery."
+    )
+
+    recover_all_gaps(
+        kite
+    )
+
+
+def run_eod_refresh(
+    kite
+):
+
+    log.info(
+        "Running EOD refresh."
     )
 
     download_eod_pending_spot(
@@ -166,37 +110,179 @@ def run_end_of_day(
         kite
     )
 
-    log.info(
-        "Market closed. Bot shutting down."
+
+def market_open():
+
+    now = now_ist()
+
+    start = now.replace(
+        hour=MARKET_START_HOUR,
+        minute=MARKET_START_MINUTE,
+        second=0,
+        microsecond=0
     )
+
+    end = now.replace(
+        hour=MARKET_END_HOUR,
+        minute=MARKET_END_MINUTE,
+        second=0,
+        microsecond=0
+    )
+
+    return start <= now <= end
+
+
+def is_market_open():
+    return market_open()
+
+
+def wait_until_market_open():
+
+    while not market_open():
+
+        log.info(
+            "Waiting for market open..."
+        )
+
+        time.sleep(30)
+
+
+def wait_until_market_close():
+
+    while market_open():
+
+        time.sleep(5)
 
 
 def start_scheduler(
     kite,
-    instruments
+    instruments,
+    websocket
 ):
-    while True:
-        if is_weekend():
-            run_end_of_day(
-                kite,
-                instruments
-            )
-            break
 
-        if not is_market_open():
-            run_end_of_day(
-                kite,
-                instruments
-            )
-            break
+    if FORCE_MARKET_CLOSE:
 
-        run_live_cycle(
+        log.warning(
+            "FORCE_MARKET_CLOSE=True"
+        )
+
+        run_eod_refresh(
+            kite
+        )
+
+        run_gap_recovery(
+            kite
+        )
+
+        return
+
+    now = now_ist()
+
+    premarket_update = now.replace(
+        hour=PREMARKET_UPDATE_HOUR,
+        minute=PREMARKET_UPDATE_MINUTE,
+        second=0,
+        microsecond=0
+    )
+
+    premarket_wait = now.replace(
+        hour=PREMARKET_WAIT_HOUR,
+        minute=PREMARKET_WAIT_MINUTE,
+        second=0,
+        microsecond=0
+    )
+
+    market_start = now.replace(
+        hour=MARKET_START_HOUR,
+        minute=MARKET_START_MINUTE,
+        second=0,
+        microsecond=0
+    )
+
+    market_end = now.replace(
+        hour=MARKET_END_HOUR,
+        minute=MARKET_END_MINUTE,
+        second=0,
+        microsecond=0
+    )
+
+    if premarket_update <= now < premarket_wait:
+
+        log.info(
+            "Premarket update window."
+        )
+
+        run_historical_download(
             kite,
             instruments
         )
 
-        log.info(
-            "Sleeping 60 seconds"
+        run_gap_recovery(
+            kite
         )
 
-        time.sleep(60)
+        wait_until_market_open()
+
+    elif premarket_wait <= now < market_start:
+
+        log.info(
+            "Premarket waiting window."
+        )
+
+        wait_until_market_open()
+
+    elif market_start <= now < market_end:
+
+        log.info(
+            "Market already open."
+        )
+
+    else:
+
+        log.info(
+            "Market closed."
+        )
+
+        run_eod_refresh(
+            kite
+        )
+
+        run_gap_recovery(
+            kite
+        )
+
+        return
+
+    log.info(
+        "Starting live session."
+    )
+
+    websocket.connect()
+
+    try:
+
+        wait_until_market_close()
+
+    finally:
+
+        log.info(
+            "Stopping live session."
+        )
+
+        websocket.disconnect()
+
+    log.info(
+        "Running post market refresh."
+    )
+
+    run_eod_refresh(
+        kite
+    )
+
+    run_gap_recovery(
+        kite
+    )
+
+    log.info(
+        "Bot completed successfully."
+    )

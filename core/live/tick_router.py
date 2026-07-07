@@ -22,10 +22,15 @@ class TickRouter:
 
     def __init__(
         self,
-        instrument_lookup
+        instrument_lookup,
+        subscription_manager=None
     ):
         self.instrument_lookup = (
             instrument_lookup
+        )
+        
+        self.subscription_manager = (
+            subscription_manager
         )
 
         self.dispatcher = (
@@ -47,17 +52,48 @@ class TickRouter:
             if metadata is None:
                 continue
 
+            segment = metadata["segment"]
+
+            if segment == "INDICES":
+
+                self.process_spot_tick(
+                    tick,
+                    metadata
+                )
+
+            elif segment == "NFO-FUT":
+
+                self.process_future_tick(
+                    tick,
+                    metadata
+                )
+
+            elif segment == "NFO-OPT":
+
+                self.process_option_tick(
+                    tick,
+                    metadata
+                )
+
             self.dispatcher.publish(
                 "tick",
                 tick,
                 metadata
             )
-
+            
+        
     def process_spot_tick(
         self,
         tick,
         metadata
     ):
+        
+        if self.subscription_manager:
+
+            self.subscription_manager.update_from_spot(
+                tick["last_price"]
+            )
+        
         log.debug(
             f"SPOT : "
             f"{metadata['tradingsymbol']}"

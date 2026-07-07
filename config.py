@@ -1,5 +1,30 @@
 from pathlib import Path
 
+# ==========================================================
+# BOT EXECUTION MODE
+# ==========================================================
+
+# False = normal behaviour
+# True  = always assume market is closed
+FORCE_MARKET_CLOSE = False
+
+
+# ==========================================================
+# BOT SCHEDULE
+# ==========================================================
+
+PREMARKET_UPDATE_HOUR = 8
+PREMARKET_UPDATE_MINUTE = 0
+
+PREMARKET_WAIT_HOUR = 9
+PREMARKET_WAIT_MINUTE = 0
+
+MARKET_START_HOUR = 9
+MARKET_START_MINUTE = 15
+
+MARKET_END_HOUR = 15
+MARKET_END_MINUTE = 30
+
 BASE_DIR = Path(__file__).resolve().parent
 
 DATA_DIR = BASE_DIR / "data"

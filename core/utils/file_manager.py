@@ -2,6 +2,8 @@ from pathlib import Path
 import pandas as pd
 import os
 import time
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 def ensure_dir(path):
     Path(path).mkdir(
@@ -44,3 +46,50 @@ def read_parquet(path):
 
 def file_exists(path):
     return Path(path).exists()
+
+def append_parquet(
+    df,
+    file_path
+):
+    file_path = Path(file_path)
+
+    ensure_dir(
+        file_path.parent
+    )
+
+    table = pa.Table.from_pandas(
+        df,
+        preserve_index=False
+    )
+
+    if not file_path.exists():
+
+        writer = pq.ParquetWriter(
+            file_path,
+            table.schema
+        )
+
+        writer.write_table(
+            table
+        )
+
+        writer.close()
+
+        return
+
+    existing = pd.read_parquet(
+        file_path
+    )
+
+    combined = pd.concat(
+        [
+            existing,
+            df
+        ],
+        ignore_index=True
+    )
+
+    atomic_write_parquet(
+        combined,
+        file_path
+    )
