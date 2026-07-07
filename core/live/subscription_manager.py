@@ -1,0 +1,178 @@
+import pandas as pd
+
+from kiteconnect import KiteTicker
+
+from core.logger import log
+
+from core.live.strike_universe import (
+    StrikeUniverse
+)
+
+
+class SubscriptionManager:
+
+    def __init__(
+        self,
+        kite,
+        websocket,
+        instruments
+    ):
+        self.kite = kite
+
+        self.websocket = websocket
+
+        self.instruments = (
+            instruments
+        )
+
+        self.universe = (
+            StrikeUniverse()
+        )
+
+        self.subscribed_tokens = set()
+
+        self.option_index = {}
+
+        option_df = self.instruments[
+            (
+                self.instruments["segment"]
+                == "NFO-OPT"
+            )
+            &
+            (
+                self.instruments["name"]
+                == "NIFTY"
+            )
+        ]
+
+        for _, row in option_df.iterrows():
+
+            strike = int(
+                row["strike"]
+            )
+
+            if strike not in self.option_index:
+                self.option_index[
+                    strike
+                ] = []
+
+            self.option_index[
+                strike
+            ].append(
+                int(
+                    row[
+                        "instrument_token"
+                    ]
+                )
+            )
+
+        future_df = self.instruments[
+            (
+                self.instruments["segment"]
+                == "NFO-FUT"
+            )
+            &
+            (
+                self.instruments["name"]
+                == "NIFTY"
+            )
+        ].sort_values(
+            "expiry"
+        )
+
+        self.future_tokens = (
+            future_df[
+                "instrument_token"
+            ]
+            .astype(int)
+            .tolist()
+        )
+
+        self.spot_token = 256265
+
+    def subscribe_initial(self):
+
+        mid = (
+            self.universe.previous_high
+            +
+            self.universe.previous_low
+        ) / 2
+
+        strikes, _ = (
+            self.universe.update(
+                mid
+            )
+        )
+
+        self.subscribe_strikes(
+            strikes
+        )
+
+    def update_from_spot(
+        self,
+        ltp
+    ):
+        strikes, changed = (
+            self.universe.update(
+                ltp
+            )
+        )
+
+        if not changed:
+            return
+
+        self.subscribe_strikes(
+            strikes
+        )
+
+    def subscribe_strikes(
+        self,
+        strikes
+    ):
+
+        tokens = []
+
+        for strike in strikes:
+
+            tokens.extend(
+                self.option_index.get(
+                    int(strike),
+                    []
+                )
+            )
+
+        tokens.extend(
+            self.future_tokens
+        )
+
+        tokens.append(
+            self.spot_token
+        )
+
+        tokens = list(
+            set(tokens)
+            -
+            self.subscribed_tokens
+        )
+
+        if not tokens:
+            return
+
+        self.websocket.subscribe(
+            tokens
+        )
+
+        self.websocket.set_mode(
+            KiteTicker.MODE_FULL,
+            tokens
+        )
+
+        self.subscribed_tokens.update(
+            tokens
+        )
+
+        log.info(
+            f"Subscribed "
+            f"{len(tokens)} "
+            f"instruments"
+        )

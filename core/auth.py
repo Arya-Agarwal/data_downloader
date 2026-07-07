@@ -3,7 +3,10 @@ import webbrowser
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from kiteconnect import KiteConnect
+from kiteconnect import (
+    KiteConnect,
+    KiteTicker
+)
 from dotenv import load_dotenv
 
 from core.logger import log
@@ -150,4 +153,22 @@ def get_kite():
 
         return kite
 
-    return login_and_generate_token()
+    
+
+def get_kite_ticker():
+    """
+    Returns an authenticated KiteTicker instance.
+
+    Uses the same authentication flow as get_kite(),
+    ensuring there is only one source of truth for
+    Zerodha credentials.
+    """
+
+    kite = get_kite()
+
+    creds = read_env()
+
+    return KiteTicker(
+        api_key=creds["api_key"],
+        access_token=creds["access_token"]
+    )
