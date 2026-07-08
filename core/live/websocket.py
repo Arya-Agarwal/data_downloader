@@ -32,6 +32,11 @@ from core.runtime.runtime_metrics import (
 from core.runtime.health_monitor import (
     HealthMonitor
 )
+
+from core.downloaders.spot_downloader import (
+    get_today_high_low
+)
+
 import time
 
 
@@ -39,15 +44,14 @@ class LiveWebSocket:
     """
     Wrapper around KiteTicker.
 
-    Responsibilities:
-    - Create authenticated KiteTicker
-    - Manage connection lifecycle
-    - Register websocket callbacks
+    Responsibilities
 
-    Does NOT:
-    - Subscribe instruments
-    - Process ticks
-    - Write files
+    - Manage websocket lifecycle
+    - Route ticks
+    - Flush tick buffer
+
+    Strike universe expansion is handled
+    by HealthMonitor.
     """
 
     def __init__(self):
@@ -56,14 +60,23 @@ class LiveWebSocket:
 
         self.metrics = RuntimeMetrics()
 
-        self.health_monitor = HealthMonitor()
-         
         self.last_flush = time.time()
 
-        self.flush_interval = 5        # seconds
-        self.flush_threshold = 100     # ticks
+        self.flush_interval = 5
+
+        self.flush_threshold = 100
 
         kite = self.kite
+
+        #
+        # Initialize today's range from
+        # historical minute candles.
+        #
+        today_low, today_high = (
+            get_today_high_low(
+                kite
+            )
+        )
 
         self.instrument_lookup = (
             InstrumentLookup(
@@ -79,30 +92,40 @@ class LiveWebSocket:
 
         self.kws = get_kite_ticker()
 
+        #
+        # Subscription manager
+        #
         self.subscription_manager = (
             SubscriptionManager(
                 kite,
                 self.kws,
-                self.instrument_lookup.df
+                self.instrument_lookup.df,
+                today_low=today_low,
+                today_high=today_high
+            )
+        )
+
+        #
+        # Health monitor depends on
+        # SubscriptionManager.
+        #
+        self.health_monitor = (
+            HealthMonitor(
+                self.subscription_manager
             )
         )
 
         self.tick_router = (
             TickRouter(
                 self.instrument_lookup,
+                self.tick_buffer,
                 self.subscription_manager
             )
         )
 
         #
-        # IMPORTANT
-        # Connect TickRouter -> TickBuffer
+        # WebSocket callbacks
         #
-        self.tick_router.dispatcher.subscribe(
-            "tick",
-            self.tick_buffer.update
-        )
-
         self.kws.on_connect = self.on_connect
         self.kws.on_close = self.on_close
         self.kws.on_error = self.on_error
@@ -155,9 +178,9 @@ class LiveWebSocket:
 
         self.metrics.websocket_connected()
 
-        self.health_monitor.start()
-
         self.subscription_manager.subscribe_initial()
+
+        self.health_monitor.start()
 
     def on_close(
         self,

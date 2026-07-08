@@ -1,6 +1,10 @@
 import threading
 import time
 
+from config import (
+    LIVE_UNIVERSE_UPDATE_SECONDS
+)
+
 from core.runtime.daily_tracker import (
     DailyTracker
 )
@@ -14,10 +18,15 @@ class HealthMonitor:
 
     def __init__(
         self,
-        interval=60
+        subscription_manager,
+        interval=1
     ):
 
         self.interval = interval
+
+        self.subscription_manager = (
+            subscription_manager
+        )
 
         self.tracker = DailyTracker()
 
@@ -26,6 +35,12 @@ class HealthMonitor:
         self.running = False
 
         self.thread = None
+
+        now = time.time()
+
+        self.last_status_report = now
+
+        self.last_universe_update = now
 
     def start(self):
 
@@ -49,9 +64,47 @@ class HealthMonitor:
 
         while self.running:
 
+            now = time.time()
+
+            #
+            # Run watchdog every second
+            #
             self.watchdog.check()
 
-            self.tracker.report()
+            #
+            # Print runtime summary every minute
+            #
+            if (
+                now - self.last_status_report
+                >= 60
+            ):
+
+                self.tracker.report()
+
+                self.last_status_report = now
+
+            #
+            # Expand strike universe every
+            # LIVE_UNIVERSE_UPDATE_SECONDS
+            #
+            if (
+                now - self.last_universe_update
+                >= LIVE_UNIVERSE_UPDATE_SECONDS
+            ):
+
+                try:
+
+                    self.subscription_manager.expand_strike_universe()
+
+                except Exception:
+
+                    from core.logger import log
+
+                    log.exception(
+                        "Strike universe expansion failed."
+                    )
+
+                self.last_universe_update = now
 
             time.sleep(
                 self.interval

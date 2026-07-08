@@ -25,6 +25,19 @@ MARKET_START_MINUTE = 15
 MARKET_END_HOUR = 15
 MARKET_END_MINUTE = 30
 
+# ==========================================================
+# LIVE STRIKE UNIVERSE
+# ==========================================================
+
+LIVE_STRIKE_BUFFER = 250
+
+LIVE_UNIVERSE_UPDATE_SECONDS = 300      # 5 minutes
+
+LIVE_OPTION_EXPIRIES = 3                # Current + next 2
+
+LIVE_FUTURE_EXPIRIES = 3                # Current + next 2
+
+
 BASE_DIR = Path(__file__).resolve().parent
 
 DATA_DIR = BASE_DIR / "data"

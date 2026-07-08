@@ -118,7 +118,7 @@ class TickWriter:
                     f"{tradingsymbol}: {e}"
                 )
 
-            log.info(
-                f"{tradingsymbol}: "
-                f"{len(df)} ticks written."
-            )
+            # log.info(
+            #     f"{tradingsymbol}: "
+            #     f"{len(df)} ticks written."
+            # )

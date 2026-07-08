@@ -437,3 +437,41 @@ def download_eod_pending_spot(
             new_df=new_df,
             timeframe=timeframe
         )
+        
+def get_today_high_low(kite):
+    """
+    Returns today's high and low from
+    minute candles.
+
+    Used to initialise the live strike
+    universe when the bot starts after
+    market open.
+    """
+
+    now = now_ist()
+
+    start = now.replace(
+        hour=9,
+        minute=15,
+        second=0,
+        microsecond=0
+    )
+
+    if now <= start:
+        return None, None
+
+    df = fetch_historical_chunk(
+        kite,
+        SPOT_TOKEN,
+        "minute",
+        start,
+        now
+    )
+
+    if df.empty:
+        return None, None
+
+    return (
+        float(df["low"].min()),
+        float(df["high"].max())
+    )
